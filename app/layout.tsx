@@ -9,14 +9,12 @@ import { Header } from '@/components/header'
 import { Toaster } from '@/components/ui/sonner'
 
 export const metadata = {
-  metadataBase: process.env.VERCEL_URL
-    ? new URL(`https://${process.env.VERCEL_URL}`)
-    : undefined,
+
   title: {
-    default: 'Next.js AI Chatbot',
-    template: `%s - Next.js AI Chatbot`
+    default: '产业bot',
+    template: `%s - 产业bot`
   },
-  description: 'An AI-powered chatbot template built with Next.js and Vercel.',
+  description: '回答产业相关问题',
   icons: {
     icon: '/favicon.ico',
     shortcut: '/favicon-16x16.png',
