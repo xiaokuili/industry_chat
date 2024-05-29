@@ -1,5 +1,22 @@
 import { CoreMessage } from 'ai'
 
+export type AIMessage = {
+  role: 'user' | 'assistant' | 'system' | 'function' | 'data' | 'tool'
+  content: string
+  id: string
+  name?: string
+  type?:
+    | 'answer'
+    | 'related'
+    | 'skip'
+    | 'inquiry'
+    | 'input'
+    | 'input_related'
+    | 'tool'
+    | 'followup'
+    | 'end'
+}
+
 export type Message = CoreMessage & {
   id: string
 }
