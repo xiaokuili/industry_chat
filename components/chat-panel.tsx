@@ -38,22 +38,22 @@ export function ChatPanel({
     {
       heading: '企业信息',
       subheading: '生物医药行业药品信息',
-      message: '辉瑞在国内有哪些药品?'
+      message: ''
     },
     {
       heading: '产品营销',
       subheading: '内容分布和流量分布',
-      message: `小红书AI产品的营销情况?`
+      message: ``
     },
     {
       heading: '对外投资',
-      subheading: '投资建厂',
-      message: `xx企业`
+      subheading: '投资建厂和规模扩张',
+      message: ``
     },
     {
       heading: '报告生成',
-      subheading: `企业评估报告生成`,
-      message: `xx企业?`
+      subheading: `企业评估报告`,
+      message: ``
     }
   ]
 
