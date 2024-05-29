@@ -133,13 +133,14 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
   }
 }
 
-export const AI = createAI<AIState, UIState>({
-  actions: {
-    submitUserMessage
-  },
-  initialUIState: [],
-  initialAIState: { chatId: nanoid(), messages: [] },
-  onGetUIState: async () => {
+export const AI = createAI<AIState, UIState>(
+  {
+    actions: {
+      submitUserMessage
+    },
+    initialUIState: [],
+    initialAIState: { chatId: nanoid(), messages: [] }
+    // onGetUIState: async () => {
     // 'use server'
     // const session = await auth()
     // if (session && session.user) {
@@ -151,8 +152,8 @@ export const AI = createAI<AIState, UIState>({
     // } else {
     //   return
     // }
-  },
-  onSetAIState: async ({ state }) => {
+    // },
+    // onSetAIState: async ({ state }) => {
     // 'use server'
     // const session = await auth()
     // if (session && session.user) {
@@ -166,7 +167,8 @@ export const AI = createAI<AIState, UIState>({
     //   return
     // }
   }
-})
+  // }
+)
 
 export const getUIStateFromAIState = (aiState: Chat) => {
   const result = [{ id: '', display: <></> }]
