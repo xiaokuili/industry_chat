@@ -26,7 +26,7 @@ export const Copilot: React.FC<CopilotProps> = ({ inquiry }: CopilotProps) => {
   }>({})
   const [isButtonDisabled, setIsButtonDisabled] = useState(true)
   const [, setMessages] = useUIState<typeof AI>()
-  const { submit } = useActions()
+  const { submitUserMessage } = useActions()
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(event.target.value)
@@ -73,7 +73,7 @@ export const Copilot: React.FC<CopilotProps> = ({ inquiry }: CopilotProps) => {
       ? undefined
       : new FormData(e.target as HTMLFormElement)
 
-    const response = await submit(formData, skip)
+    const response = await submitUserMessage(formData, skip)
     setMessages(currentMessages => [...currentMessages, response])
   }
 

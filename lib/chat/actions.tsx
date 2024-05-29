@@ -163,9 +163,7 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
         })
       }
     }
-
     streamText.done()
-
     if (!errorOccurred) {
       // Generate related queries
       // const relatedQueries = await querySuggestor(uiStream, messages)
@@ -185,12 +183,6 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
             content: answer,
             type: 'answer'
           }
-          // {
-          //   id: groupeId,
-          //   role: 'assistant',
-          //   content: JSON.stringify(relatedQueries),
-          //   type: 'related'
-          // }
         ]
       })
     }
