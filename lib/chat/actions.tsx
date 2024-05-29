@@ -306,11 +306,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
             case 'answer':
               return {
                 id,
-                component: (
-                  <Section title="Answer">
-                    <BotMessage content={answer.value} />
-                  </Section>
-                )
+                component: <BotMessage content={answer.value} />
               }
           }
         case 'tool':
