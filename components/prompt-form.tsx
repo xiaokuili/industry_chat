@@ -57,12 +57,12 @@ export function PromptForm({
           ...currentMessages,
           {
             id: nanoid(),
-            display: <UserMessage>{value}</UserMessage>
+            component: <UserMessage>{value}</UserMessage>
           }
         ])
-
         // Submit and get response message
-        const responseMessage = await submitUserMessage(value)
+        const formData = new FormData(e.currentTarget)
+        const responseMessage = await submitUserMessage(formData, false)
         setMessages(currentMessages => [...currentMessages, responseMessage])
       }}
     >
