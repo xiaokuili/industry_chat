@@ -9,19 +9,19 @@ import {
   streamUI,
   createStreamableValue
 } from 'ai/rsc'
+
 import { inquire } from '@/lib/chat/inquire'
 import { taskManager } from '@/lib/chat/task-manager'
-
-import {
-  formatNumber,
-  runAsyncFnWithoutBlocking,
-  sleep,
-  nanoid
-} from '@/lib/utils'
+import { researcher } from '@/lib/chat/researcher'
+import { UserMessage, BotMessage } from '@/components/message'
+import { CopilotDisplay } from '@/components/copilot-display'
+import { Section } from '@/components/section'
+import { Spinner } from '@/components/spinner'
+import RetrieveSection from '@/components/retrieve-section'
+import { nanoid } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
-import { Chat, Message } from '@/lib/types'
-import { auth } from '@/auth'
-import { CoreMessage } from 'ai'
+import { Chat } from '@/lib/types'
+import { CoreMessage, ToolResultPart } from 'ai'
 import { AIMessage } from '@/lib/types'
 
 export type AIState = {
@@ -122,7 +122,82 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       })
       return
     }
+    // Set the collapsed state to true
     isCollapsed.done(true)
+
+    //  Generate the answer
+    let answer = ''
+    let toolOutputs: ToolResultPart[] = []
+    let errorOccurred = false
+    const streamText = createStreamableValue<string>()
+    uiStream.update(<Spinner />)
+
+    // If useSpecificAPI is enabled, only function calls will be made
+    // If not using a tool, this model geerates the answer
+    while (answer.length === 0 && !errorOccurred) {
+      // Search the web and generate the answer
+      const { fullResponse, hasError, toolResponses } = await researcher(
+        uiStream,
+        streamText,
+        messages,
+        false
+      )
+      answer = fullResponse
+      toolOutputs = toolResponses
+      errorOccurred = hasError
+      console.log(answer)
+      if (toolOutputs.length > 0) {
+        toolOutputs.map(output => {
+          aiState.update({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: groupeId,
+                role: 'tool',
+                content: JSON.stringify(output.result),
+                name: output.toolName,
+                type: 'tool'
+              }
+            ]
+          })
+        })
+      }
+    }
+
+    streamText.done()
+
+    if (!errorOccurred) {
+      // Generate related queries
+      // const relatedQueries = await querySuggestor(uiStream, messages)
+      // Add follow-up panel
+
+      // Add the answer, related queries, and follow-up panel to the state
+      // Wait for 0.5 second before adding the answer to the state
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      aiState.done({
+        ...aiState.get(),
+        messages: [
+          ...aiState.get().messages,
+          {
+            id: groupeId,
+            role: 'assistant',
+            content: answer,
+            type: 'answer'
+          }
+          // {
+          //   id: groupeId,
+          //   role: 'assistant',
+          //   content: JSON.stringify(relatedQueries),
+          //   type: 'related'
+          // }
+        ]
+      })
+    }
+
+    isGenerating.done(false)
+    uiStream.done()
   }
   processEvents()
   return {
@@ -133,44 +208,139 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
   }
 }
 
-export const AI = createAI<AIState, UIState>(
-  {
-    actions: {
-      submitUserMessage
-    },
-    initialUIState: [],
-    initialAIState: { chatId: nanoid(), messages: [] }
-    // onGetUIState: async () => {
-    // 'use server'
-    // const session = await auth()
-    // if (session && session.user) {
-    //   const aiState = getAIState()
-    //   if (aiState) {
-    //     const uiState = getUIStateFromAIState(aiState)
-    //     return uiState
-    //   }
-    // } else {
-    //   return
-    // }
-    // },
-    // onSetAIState: async ({ state }) => {
-    // 'use server'
-    // const session = await auth()
-    // if (session && session.user) {
-    //   const { chatId, messages } = state
-    //   const createdAt = new Date()
-    //   const userId = session.user.id as string
-    //   const path = `/chat/${chatId}`
-    //   const firstMessageContent = messages[0].content as string
-    //   const title = firstMessageContent.substring(0, 100)
-    // } else {
-    //   return
-    // }
+const initialAIState: AIState = {
+  chatId: nanoid(),
+  messages: []
+}
+
+const initialUIState: UIState = []
+
+// AI is a provider you wrap your application with so you can access AI and UI state in your components.
+export const AI = createAI<AIState, UIState>({
+  actions: {
+    submitUserMessage
+  },
+  initialUIState,
+  initialAIState,
+  onGetUIState: async () => {
+    'use server'
+
+    const aiState = getAIState()
+    if (aiState) {
+      const uiState = getUIStateFromAIState(aiState)
+      return uiState
+    } else {
+      return
+    }
+  },
+  onSetAIState: async ({ state, done }) => {
+    'use server'
+
+    // Check if there is any message of type 'answer' in the state messages
+    if (!state.messages.some(e => e.type === 'answer')) {
+      return
+    }
+
+    const { chatId, messages } = state
+    const createdAt = new Date()
+    const userId = 'anonymous'
+    const path = `/search/${chatId}`
+    const title =
+      messages.length > 0
+        ? JSON.parse(messages[0].content)?.input?.substring(0, 100) ||
+          'Untitled'
+        : 'Untitled'
+    // Add an 'end' message at the end to determine if the history needs to be reloaded
+    const updatedMessages: AIMessage[] = [
+      ...messages,
+      {
+        id: nanoid(),
+        role: 'assistant',
+        content: `end`,
+        type: 'end'
+      }
+    ]
+
+    const chat: Chat = {
+      id: chatId,
+      createdAt,
+      userId,
+      path,
+      title,
+      messages: updatedMessages
+    }
+    await saveChat(chat)
   }
-  // }
-)
+})
 
 export const getUIStateFromAIState = (aiState: Chat) => {
-  const result = [{ id: '', display: <></> }]
-  return result
+  const chatId = aiState.chatId
+  const isSharePage = aiState.isSharePage
+  return aiState.messages
+    .map((message, index) => {
+      const { role, content, id, type, name } = message
+
+      if (!type || type === 'end' || (isSharePage && type === 'related'))
+        return null
+
+      switch (role) {
+        case 'user':
+          switch (type) {
+            case 'input':
+            case 'input_related':
+              const json = JSON.parse(content)
+              const value = type === 'input' ? json.input : json.related_query
+              return {
+                id,
+                component: <UserMessage> {content}</UserMessage>
+              }
+            case 'inquiry':
+              return {
+                id,
+                component: <CopilotDisplay content={content} />
+              }
+          }
+        case 'assistant':
+          const answer = createStreamableValue()
+          answer.done(content)
+          switch (type) {
+            case 'answer':
+              return {
+                id,
+                component: (
+                  <Section title="Answer">
+                    <BotMessage content={answer.value} />
+                  </Section>
+                )
+              }
+          }
+        case 'tool':
+          try {
+            const toolOutput = JSON.parse(content)
+            const isCollapsed = createStreamableValue()
+            isCollapsed.done(true)
+            const searchResults = createStreamableValue()
+            searchResults.done(JSON.stringify(toolOutput))
+            switch (name) {
+              case 'retrieve':
+                return {
+                  id,
+                  component: <RetrieveSection data={toolOutput} />,
+                  isCollapsed: isCollapsed.value
+                }
+            }
+          } catch (error) {
+            return {
+              id,
+              component: null
+            }
+          }
+        default:
+          return {
+            id,
+            component: null
+          }
+      }
+    })
+    .filter(message => message !== null) as UIState
 }

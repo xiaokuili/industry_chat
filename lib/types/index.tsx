@@ -1,5 +1,16 @@
 import { CoreMessage } from 'ai'
 
+export type SearchResults = {
+  images: string[]
+  results: SearchResultItem[]
+  query: string
+}
+
+export type SearchResultItem = {
+  title: string
+  url: string
+  content: string
+}
 export type AIMessage = {
   role: 'user' | 'assistant' | 'system' | 'function' | 'data' | 'tool'
   content: string
@@ -27,7 +38,7 @@ export interface Chat extends Record<string, any> {
   createdAt: Date
   userId: string
   path: string
-  messages: Message[]
+  messages: AIMessage[]
   sharePath?: string
 }
 
