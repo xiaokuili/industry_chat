@@ -145,7 +145,7 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       answer = fullResponse
       toolOutputs = toolResponses
       errorOccurred = hasError
-      console.log(answer)
+
       if (toolOutputs.length > 0) {
         toolOutputs.map(output => {
           aiState.update({
@@ -243,7 +243,7 @@ export const AI = createAI<AIState, UIState>({
 
     const { chatId, messages } = state
     const createdAt = new Date()
-    const userId = 'anonymous'
+
     const path = `/search/${chatId}`
     const title =
       messages.length > 0
@@ -264,7 +264,7 @@ export const AI = createAI<AIState, UIState>({
     const chat: Chat = {
       id: chatId,
       createdAt,
-      userId,
+      userId: '',
       path,
       title,
       messages: updatedMessages
