@@ -93,7 +93,7 @@ export function PromptForm({
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
-          name="message"
+          name="input"
           rows={1}
           value={input}
           onChange={e => setInput(e.target.value)}

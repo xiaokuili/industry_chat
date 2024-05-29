@@ -79,7 +79,6 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       : formData?.has('related_query')
         ? 'input_related'
         : 'inquiry'
-
   if (content) {
     aiState.update({
       ...aiState.get(),
@@ -244,7 +243,7 @@ export const AI = createAI<AIState, UIState>({
     const { chatId, messages } = state
     const createdAt = new Date()
 
-    const path = `/search/${chatId}`
+    const path = `/chat/${chatId}`
     const title =
       messages.length > 0
         ? JSON.parse(messages[0].content)?.input?.substring(0, 100) ||
@@ -292,7 +291,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               const value = type === 'input' ? json.input : json.related_query
               return {
                 id,
-                component: <UserMessage> {content}</UserMessage>
+                component: <UserMessage> {value}</UserMessage>
               }
             case 'inquiry':
               return {
