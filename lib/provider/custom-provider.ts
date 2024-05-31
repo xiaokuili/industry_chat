@@ -3,8 +3,11 @@ import {
   loadApiKey,
   withoutTrailingSlash
 } from '@ai-sdk/provider-utils'
-import { CustomChatLanguageModel } from './custom-chat-language-model'
-import { CustomChatModelId, CustomChatSettings } from './custom-chat-settings'
+import { CustomChatLanguageModel } from '@/lib/provider/custom-chat-language-model'
+import {
+  CustomChatModelId,
+  CustomChatSettings
+} from '@/lib/provider/custom-chat-settings'
 
 // model factory function with additional methods and properties
 export interface CustomProvider {
@@ -51,14 +54,9 @@ export function createCustomProvider(
       baseURL:
         withoutTrailingSlash(options.baseURL) ?? 'https://custom.ai/api/v1',
       headers: () => ({
-        Authorization: `Bearer ${loadApiKey({
-          apiKey: options.apiKey,
-          environmentVariableName: 'CUSTOM_API_KEY',
-          description: 'Custom Provider'
-        })}`,
         ...options.headers
       }),
-      generateId: options.generateId ?? generateId
+      generateId: generateId
     })
 
   const provider = function (

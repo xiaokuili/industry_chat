@@ -1,9 +1,7 @@
 import {
   LanguageModelV1,
-  LanguageModelV1CallWarning,
   LanguageModelV1FinishReason,
-  LanguageModelV1StreamPart,
-  UnsupportedFunctionalityError
+  LanguageModelV1StreamPart
 } from '@ai-sdk/provider'
 import {
   ParseResult,
@@ -11,35 +9,63 @@ import {
   createJsonResponseHandler,
   postJsonToApi
 } from '@ai-sdk/provider-utils'
-import { z } from 'zod'
-import { convertToMistralChatMessages } from './convert-to-mistral-chat-messages'
-import { mapMistralFinishReason } from './map-mistral-finish-reason'
 import {
-  MistralChatModelId,
-  MistralChatSettings
-} from './mistral-chat-settings'
-import { mistralFailedResponseHandler } from './mistral-error'
+  CustomChatModelId,
+  CustomChatSettings
+} from '@/lib/provider/custom-chat-settings'
+import { createJsonErrorResponseHandler } from '@ai-sdk/provider-utils'
+import { z } from 'zod'
 
-type MistralChatConfig = {
+const mistralErrorDataSchema = z.object({
+  object: z.literal('error'),
+  message: z.string(),
+  type: z.string(),
+  param: z.string().nullable(),
+  code: z.string().nullable()
+})
+
+export type MistralErrorData = z.infer<typeof mistralErrorDataSchema>
+
+export const mistralFailedResponseHandler = createJsonErrorResponseHandler({
+  errorSchema: mistralErrorDataSchema,
+  errorToMessage: data => data.message
+})
+function mapMistralFinishReason(
+  finishReason: string | null | undefined
+): LanguageModelV1FinishReason {
+  switch (finishReason) {
+    case 'stop':
+      return 'stop'
+    case 'length':
+    case 'model_length':
+      return 'length'
+    case 'tool_calls':
+      return 'tool-calls'
+    default:
+      return 'other'
+  }
+}
+
+type CostomChatConfig = {
   provider: string
   baseURL: string
   headers: () => Record<string, string | undefined>
   generateId: () => string
 }
 
-export class MistralChatLanguageModel implements LanguageModelV1 {
+export class CustomChatLanguageModel implements LanguageModelV1 {
   readonly specificationVersion = 'v1'
   readonly defaultObjectGenerationMode = 'json'
 
-  readonly modelId: MistralChatModelId
-  readonly settings: MistralChatSettings
+  readonly modelId: CustomChatModelId
+  readonly settings: CustomChatSettings
 
-  private readonly config: MistralChatConfig
+  private readonly config: CostomChatConfig
 
   constructor(
-    modelId: MistralChatModelId,
-    settings: MistralChatSettings,
-    config: MistralChatConfig
+    modelId: CustomChatModelId,
+    settings: CustomChatSettings,
+    config: CostomChatConfig
   ) {
     this.modelId = modelId
     this.settings = settings
@@ -50,102 +76,20 @@ export class MistralChatLanguageModel implements LanguageModelV1 {
     return this.config.provider
   }
 
-  private getArgs({
-    mode,
-    prompt,
-    maxTokens,
-    temperature,
-    topP,
-    frequencyPenalty,
-    presencePenalty,
-    seed
-  }: Parameters<LanguageModelV1['doGenerate']>[0]) {
-    const type = mode.type
-
-    const warnings: LanguageModelV1CallWarning[] = []
-
-    if (frequencyPenalty != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'frequencyPenalty'
-      })
-    }
-
-    if (presencePenalty != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'presencePenalty'
-      })
-    }
-
-    const baseArgs = {
-      // model id:
-      model: this.modelId,
-
-      // model specific settings:
-      safe_prompt: this.settings.safePrompt,
-
-      // standardized settings:
-      max_tokens: maxTokens,
-      temperature,
-      top_p: topP,
-      random_seed: seed,
-
-      // messages:
-      messages: convertToMistralChatMessages(prompt)
-    }
-
-    switch (type) {
-      case 'regular': {
-        return {
-          args: { ...baseArgs, ...prepareToolsAndToolChoice(mode) },
-          warnings
-        }
-      }
-
-      case 'object-json': {
-        return {
-          args: {
-            ...baseArgs,
-            response_format: { type: 'json_object' }
-          },
-          warnings
-        }
-      }
-
-      case 'object-tool': {
-        return {
-          args: {
-            ...baseArgs,
-            tool_choice: 'any',
-            tools: [{ type: 'function', function: mode.tool }]
-          },
-          warnings
-        }
-      }
-
-      case 'object-grammar': {
-        throw new UnsupportedFunctionalityError({
-          functionality: 'object-grammar mode'
-        })
-      }
-
-      default: {
-        const _exhaustiveCheck: never = type
-        throw new Error(`Unsupported type: ${_exhaustiveCheck}`)
-      }
-    }
+  private getArgs({ prompt }: Parameters<LanguageModelV1['doGenerate']>[0]) {
+    // prompt 可以是字符串，可以是其他
+    return prompt
   }
 
   async doGenerate(
     options: Parameters<LanguageModelV1['doGenerate']>[0]
   ): Promise<Awaited<ReturnType<LanguageModelV1['doGenerate']>>> {
-    const { args, warnings } = this.getArgs(options)
+    const prompt = this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
       url: `${this.config.baseURL}/chat/completions`,
       headers: this.config.headers(),
-      body: args,
+      body: prompt,
       failedResponseHandler: mistralFailedResponseHandler,
       successfulResponseHandler: createJsonResponseHandler(
         mistralChatResponseSchema
@@ -153,38 +97,32 @@ export class MistralChatLanguageModel implements LanguageModelV1 {
       abortSignal: options.abortSignal
     })
 
-    const { messages: rawPrompt, ...rawSettings } = args
-    const choice = response.choices[0]
-
     return {
-      text: choice.message.content ?? undefined,
-      toolCalls: choice.message.tool_calls?.map(toolCall => ({
-        toolCallType: 'function',
-        toolCallId: this.config.generateId(),
-        toolName: toolCall.function.name,
-        args: toolCall.function.arguments!
-      })),
-      finishReason: mapMistralFinishReason(choice.finish_reason),
+      text: '' ?? undefined,
+      toolCalls: [],
+      finishReason: mapMistralFinishReason(''),
       usage: {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens
       },
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      warnings
+      rawCall: {
+        rawPrompt: 'default prompt',
+        rawSettings: {}
+      },
+      rawResponse: { headers: responseHeaders }
     }
   }
 
   async doStream(
     options: Parameters<LanguageModelV1['doStream']>[0]
   ): Promise<Awaited<ReturnType<LanguageModelV1['doStream']>>> {
-    const { args, warnings } = this.getArgs(options)
+    const prompt = this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
       url: `${this.config.baseURL}/chat/completions`,
       headers: this.config.headers(),
       body: {
-        ...args,
+        prompt,
         stream: true
       },
       failedResponseHandler: mistralFailedResponseHandler,
@@ -193,8 +131,6 @@ export class MistralChatLanguageModel implements LanguageModelV1 {
       ),
       abortSignal: options.abortSignal
     })
-
-    const { messages: rawPrompt, ...rawSettings } = args
 
     let finishReason: LanguageModelV1FinishReason = 'other'
     let usage: { promptTokens: number; completionTokens: number } = {
@@ -274,9 +210,8 @@ export class MistralChatLanguageModel implements LanguageModelV1 {
           }
         })
       ),
-      rawCall: { rawPrompt, rawSettings },
-      rawResponse: { headers: responseHeaders },
-      warnings
+      rawCall: { rawPrompt: '', rawSettings: {} },
+      rawResponse: { headers: responseHeaders }
     }
   }
 }
@@ -342,55 +277,3 @@ const mistralChatChunkSchema = z.object({
     .optional()
     .nullable()
 })
-
-function prepareToolsAndToolChoice(
-  mode: Parameters<LanguageModelV1['doGenerate']>[0]['mode'] & {
-    type: 'regular'
-  }
-) {
-  // when the tools array is empty, change it to undefined to prevent errors:
-  const tools = mode.tools?.length ? mode.tools : undefined
-
-  if (tools == null) {
-    return { tools: undefined, tool_choice: undefined }
-  }
-
-  const mappedTools = tools.map(tool => ({
-    type: 'function',
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters
-    }
-  }))
-
-  const toolChoice = mode.toolChoice
-
-  if (toolChoice == null) {
-    return { tools: mappedTools, tool_choice: undefined }
-  }
-
-  const type = toolChoice.type
-
-  switch (type) {
-    case 'auto':
-    case 'none':
-      return { tools: mappedTools, tool_choice: type }
-    case 'required':
-      return { tools: mappedTools, tool_choice: 'any' }
-
-    // mistral does not support tool mode directly,
-    // so we filter the tools and force the tool choice through 'any'
-    case 'tool':
-      return {
-        tools: mappedTools.filter(
-          tool => tool.function.name === toolChoice.toolName
-        ),
-        tool_choice: 'any'
-      }
-    default: {
-      const _exhaustiveCheck: never = type
-      throw new Error(`Unsupported tool choice type: ${_exhaustiveCheck}`)
-    }
-  }
-}
