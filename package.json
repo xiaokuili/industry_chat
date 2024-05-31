@@ -10,7 +10,8 @@
     "seed": "node -r dotenv/config ./scripts/seed.mjs",
     "type-check": "tsc --noEmit",
     "format:write": "prettier --write \"{app,lib,components}/**/*.{ts,tsx,mdx}\" --cache",
-    "format:check": "prettier --check \"{app,lib,components}**/*.{ts,tsx,mdx}\" --cache"
+    "format:check": "prettier --check \"{app,lib,components}**/*.{ts,tsx,mdx}\" --cache",
+    "test": "vitest"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.9",
@@ -61,18 +62,21 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.10",
+    "@testing-library/react": "^15.0.7",
     "@types/d3-scale": "^4.0.8",
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@types/react-syntax-highlighter": "^15.5.11",
     "@typescript-eslint/parser": "^6.19.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.17",
     "dotenv": "^16.4.5",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.1.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-tailwindcss": "^3.14.0",
+    "jsdom": "^24.1.0",
     "postcss": "^8.4.33",
     "prettier": "^3.2.4",
     "tailwind-merge": "^2.2.0",
