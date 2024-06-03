@@ -18,7 +18,7 @@ const provider = createCustomProvider({
 const model = provider.chat('mistral-small-latest')
 
 test('api', async () => {
-  const { text } = await model.doGenerate({
+  const { stream } = await model.doStream({
     inputFormat: 'prompt',
     mode: { type: 'regular' },
     prompt: TEST_PROMPT

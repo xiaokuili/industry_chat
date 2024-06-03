@@ -23,6 +23,8 @@ import { saveChat } from '@/app/actions'
 import { Chat } from '@/lib/types'
 import { CoreMessage, ToolResultPart } from 'ai'
 import { AIMessage } from '@/lib/types'
+import { RemoteRunnable } from '@langchain/core/runnables/remote'
+import { create } from 'domain'
 
 export type AIState = {
   chatId: string
@@ -42,6 +44,10 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
   const uiStream = createStreamableUI()
   const isGenerating = createStreamableValue(true)
   const isCollapsed = createStreamableValue(false)
+
+  const remoteChain = new RemoteRunnable({
+    url: 'http://localhost:8000/industry'
+  })
 
   const messages: CoreMessage[] = [...aiState.get().messages]
     .filter(
@@ -133,6 +139,49 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
 
     // If useSpecificAPI is enabled, only function calls will be made
     // If not using a tool, this model geerates the answer
+    const logStream = await remoteChain.streamEvents(
+      {
+        question: '今天周几?',
+        chat_history: []
+      },
+      // LangChain runnable config properties
+      {
+        // Version is required for streamEvents since it's a beta API
+        version: 'v1',
+        // Optional, chain specific config
+        metadata: {
+          conversation_id: 'other_metadata'
+        }
+      },
+      // Optional additional streamLog properties for filtering outputs
+      {
+        includeNames: ['prompt', 'llm', 'retriever']
+        // includeTags: [],
+        // includeTypes: [],
+        // excludeNames: [],
+        // excludeTags: [],
+        // excludeTypes: [],
+      }
+    )
+
+    for await (const chunk of logStream) {
+      switch (chunk.event) {
+        case 'on_prompt_end':
+          console.log('Prompt end:', chunk.data)
+          break
+        case 'on_chat_model_end':
+          console.log('LLM end:', chunk.data.output.generations[0][0].text)
+          const value1 = createStreamableValue()
+          value1.update('1111111' + chunk.data.output.generations[0][0].text)
+          uiStream.update(<BotMessage content={value1.value} />)
+          value1.done()
+          break
+        case 'on_retriever_end':
+          console.log('Retriever end:', chunk.data)
+          break
+      }
+    }
+
     while (answer.length === 0 && !errorOccurred) {
       // Search the web and generate the answer
       const { fullResponse, hasError, toolResponses } = await researcher(
