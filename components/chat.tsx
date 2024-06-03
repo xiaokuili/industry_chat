@@ -37,7 +37,7 @@ export function Chat({ id, className, session, missingKeys }: ChatProps) {
   }, [id, path, session?.user, messages])
 
   useEffect(() => {
-    if (aiState.messages[aiState.messages.length - 1]?.type === 'answer') {
+    if (aiState.messages.some((m: AIMessage) => m.type === 'answer')) {
       router.refresh()
     }
   }, [aiState, router])

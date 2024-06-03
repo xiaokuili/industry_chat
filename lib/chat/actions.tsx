@@ -20,11 +20,12 @@ import { Spinner } from '@/components/spinner'
 import RetrieveSection from '@/components/retrieve-section'
 import { nanoid } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
-import { Chat } from '@/lib/types'
-import { CoreMessage, ToolResultPart } from 'ai'
+import { Chat, SearchResultItem, SearchResults } from '@/lib/types'
+import { CoreMessage, tool, ToolResultPart } from 'ai'
 import { AIMessage } from '@/lib/types'
 import { RemoteRunnable } from '@langchain/core/runnables/remote'
 import { create } from 'domain'
+import { SearchSkeleton } from '@/components/search-skeleton'
 
 export type AIState = {
   chatId: string
@@ -85,6 +86,7 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       : formData?.has('related_query')
         ? 'input_related'
         : 'inquiry'
+
   if (content) {
     aiState.update({
       ...aiState.get(),
@@ -104,41 +106,24 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
     })
   }
   async function processEvents() {
-    let action = { object: { next: 'proceed' } }
-    // If the user skips the task, we proceed to the search
-    if (!skip) action = (await taskManager(messages)) ?? action
-
-    if (action.object.next === 'inquire') {
-      // Generate inquiry
-      const inquiry = await inquire(uiStream, messages)
-      uiStream.done()
-      isGenerating.done()
-      isCollapsed.done(false)
-      aiState.done({
-        ...aiState.get(),
-        messages: [
-          ...aiState.get().messages,
-          {
-            id: nanoid(),
-            role: 'assistant',
-            content: `inquiry: ${inquiry?.question}`
-          }
-        ]
-      })
-      return
-    }
     // Set the collapsed state to true
     isCollapsed.done(true)
 
     //  Generate the answer
     let answer = ''
-    let toolOutputs: ToolResultPart[] = []
+
+    let searchResults: SearchResults = {
+      images: [],
+      results: [],
+      query: ''
+    }
     let errorOccurred = false
     const streamText = createStreamableValue<string>()
     uiStream.update(<Spinner />)
 
     // If useSpecificAPI is enabled, only function calls will be made
     // If not using a tool, this model geerates the answer
+
     const logStream = await remoteChain.streamEvents(
       {
         question: '今天周几?',
@@ -164,54 +149,40 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       }
     )
 
+    uiStream.update(null)
+    const answerSection = <BotMessage content={streamText.value} />
+
     for await (const chunk of logStream) {
       switch (chunk.event) {
         case 'on_prompt_end':
           console.log('Prompt end:', chunk.data)
           break
         case 'on_chat_model_end':
-          console.log('LLM end:', chunk.data.output.generations[0][0].text)
-          const value1 = createStreamableValue()
-          value1.update('1111111' + chunk.data.output.generations[0][0].text)
-          uiStream.update(<BotMessage content={value1.value} />)
-          value1.done()
+          answer = chunk.data.output.generations[0][0].text
+          streamText.update(answer)
+          uiStream.append(answerSection)
           break
         case 'on_retriever_end':
-          console.log('Retriever end:', chunk.data)
+          const results: SearchResultItem[] = chunk.data.output.documents.map(
+            (doc: any) => {
+              return {
+                title: doc.metadata.title,
+                url: doc.metadata.source,
+                content: doc.pageContent
+              }
+            }
+          )
+          searchResults = {
+            images: [],
+            results,
+            query: '今天周几'
+          }
+          uiStream.append(<RetrieveSection data={searchResults} />)
+
           break
       }
     }
 
-    while (answer.length === 0 && !errorOccurred) {
-      // Search the web and generate the answer
-      const { fullResponse, hasError, toolResponses } = await researcher(
-        uiStream,
-        streamText,
-        messages,
-        false
-      )
-      answer = fullResponse
-      toolOutputs = toolResponses
-      errorOccurred = hasError
-
-      if (toolOutputs.length > 0) {
-        toolOutputs.map(output => {
-          aiState.update({
-            ...aiState.get(),
-            messages: [
-              ...aiState.get().messages,
-              {
-                id: groupeId,
-                role: 'tool',
-                content: JSON.stringify(output.result),
-                name: output.toolName,
-                type: 'tool'
-              }
-            ]
-          })
-        })
-      }
-    }
     streamText.done()
     if (!errorOccurred) {
       // Generate related queries
@@ -222,12 +193,26 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
       // Wait for 0.5 second before adding the answer to the state
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      aiState.done({
+      aiState.update({
         ...aiState.get(),
         messages: [
           ...aiState.get().messages,
           {
-            id: groupeId,
+            id: nanoid(),
+            role: 'tool',
+            content: JSON.stringify(searchResults),
+            type: 'tool',
+            name: 'retrieve'
+          }
+        ]
+      })
+
+      aiState.update({
+        ...aiState.get(),
+        messages: [
+          ...aiState.get().messages,
+          {
+            id: nanoid(),
             role: 'assistant',
             content: answer,
             type: 'answer'
@@ -235,7 +220,20 @@ async function submitUserMessage(formData: FormData, skip: boolean) {
         ]
       })
     }
+    await new Promise(resolve => setTimeout(resolve, 500))
 
+    aiState.done({
+      ...aiState.get(),
+      messages: [
+        ...aiState.get().messages,
+        {
+          id: nanoid(),
+          role: 'assistant',
+          content: 'end',
+          type: 'end'
+        }
+      ]
+    })
     isGenerating.done(false)
     uiStream.done()
   }
@@ -357,6 +355,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
             isCollapsed.done(true)
             const searchResults = createStreamableValue()
             searchResults.done(JSON.stringify(toolOutput))
+            console.log(toolOutput)
             switch (name) {
               case 'retrieve':
                 return {
